@@ -68,7 +68,7 @@ private Dls _dls;
 
 *******************************************************************************/
 
-public class Dls : Node!(DlsNode, "dls")
+public class Dls : Cluster!(DlsNode, "dls")
 {
     import swarm.neo.AddrPort;
     public import dlsproto.client.legacy.DlsConst;
@@ -111,7 +111,7 @@ public class Dls : Node!(DlsNode, "dls")
         char[swarm.util.Hash.HashDigits] str_key;
         swarm.util.Hash.toHexString(key, str_key);
 
-        global_storage.getCreate(channel).put(str_key.dup, value.dup);
+        this.randomNode().node.getCreate(channel).put(str_key.dup, value.dup);
     }
 
     /***************************************************************************
@@ -138,7 +138,11 @@ public class Dls : Node!(DlsNode, "dls")
         char[swarm.util.Hash.HashDigits] str_key;
         swarm.util.Hash.toHexString(key, str_key);
 
-        return global_storage.getVerify(channel).getVerify(str_key[]);
+        Const!(cstring[]) values;
+        foreach ( node; this.nodes )
+            value ~= node.getVerify(channel).getVerify(str_key[]);
+
+        return values;
     }
 
     /***************************************************************************
@@ -158,7 +162,11 @@ public class Dls : Node!(DlsNode, "dls")
 
     public Const!(char[][])[hash_t] getAll ( cstring channel )
     {
-        return global_storage.getVerify(channel).getAll();
+        Const!(char[][])[hash_t] records;
+        foreach ( node; this.nodes )
+            records ~= node.getVerify(channel).getAll();
+
+        return records;
     }
 
     /***************************************************************************
@@ -188,10 +196,31 @@ public class Dls : Node!(DlsNode, "dls")
     public ChannelSize getSize ( cstring channel)
     {
         ChannelSize result;
-        if (auto channel_obj = global_storage.get(channel))
-            channel_obj.countSize(result.records, result.bytes);
+        foreach ( node; this.nodes )
+        {
+            if (auto channel_obj = node.get(channel))
+            {
+                size_t records, bytes;
+                channel_obj.countSize(records, bytes);
+                result.records += records;
+                result.bytes += bytes;
+            }
+        }
         return result;
     }
+}
+
+/// TODO
+public class DlsNode : Node!(DlsNode)
+{
+    import swarm.neo.AddrPort;
+    public import dlsproto.client.legacy.DlsConst;
+    static import swarm.util.Hash;
+
+    import ocean.core.Enforce;
+    import ocean.text.convert.Formatter;
+    import ocean.task.Scheduler;
+    import swarm.Const: NodeItem;
 
     /***************************************************************************
 
